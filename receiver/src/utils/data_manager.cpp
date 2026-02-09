@@ -13,6 +13,7 @@ void initDataManager() {
     memset(&currentState, 0, sizeof(SystemData));
     currentState.loraModuleConnected = false;
     currentState.dhtModuleConnected = false;
+    currentState.lastRssi = -999;
     currentState.wifiConnected = false;
     currentState.mqttConnected = false;
     currentState.timeSynced = false;
@@ -42,6 +43,12 @@ void updateRemoteData(uint8_t sensorId, float temp, float hum) {
             Serial.print("[DataManager] ID Inconnu ignore: ");
             Serial.println(sensorId);
         }
+        xSemaphoreGive(dataMutex);
+    }
+}
+void setLastRssi(int rssi) {
+    if (xSemaphoreTake(dataMutex, portMAX_DELAY)) {
+        currentState.lastRssi = rssi;
         xSemaphoreGive(dataMutex);
     }
 }

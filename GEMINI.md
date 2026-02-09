@@ -34,10 +34,9 @@ The system runs three main parallel tasks:
 
 2.  **`wifiTask`** (`src/tasks/wifi_task.cpp`):
     - Manages WiFi connection (reconnect logic).
-    - Controls the **LED Matrix** (displays scrolling text/animations during connection attempts).
-    - **Web Server:**
-        - Serves the Dashboard HTML (`/`).
-        - Serves JSON data (`/api/data`) for the frontend.
+    - Manages MQTT connection to the broker defined in `config.h`.
+    - Publishes data from `DataManager` to MQTT topics periodically.
+    - It is a direct MQTT client, not a web server.
 
 3.  **`sensorTask`** (`src/tasks/sensor_task.cpp`):
     - Periodically reads the local **DHT22** sensor.
@@ -52,11 +51,6 @@ The system runs three main parallel tasks:
     - Helper to drive the Arduino R4 WiFi LED Matrix.
     - Displays temperature or connection status visually.
 
-### Web Interface
-- **`web_assets.h`** (`src/web/web_assets.h`):
-    - Contains the entire frontend code stored in program memory (`PROGMEM`).
-    - **Tech Stack:** Simple HTML5, **Pico.css** (Styling), **Alpine.js** (Reactive UI).
-    - Fetches data every 2 seconds via `/api/data`.
 
 ### Hardware Configuration (config.h)
 - **LoRa Module:** UART (`Serial1`), Pins: SS(10), RST(9), DIO0(2).

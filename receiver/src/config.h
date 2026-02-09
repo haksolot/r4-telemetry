@@ -6,7 +6,7 @@
 #define WIFI_PASS "#F2uV4R3*"
 
 // MQTT Configuration
-#define MQTT_SERVER "10.191.64.108"
+#define MQTT_SERVER "10.191.64.102"
 #define MQTT_PORT 1883
 #define MQTT_TOPIC_CAFET "cesi/cafet"
 #define MQTT_TOPIC_FABLAB "cesi/fablab"

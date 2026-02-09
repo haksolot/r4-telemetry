@@ -205,118 +205,266 @@ static void sendAck(const uint8_t *hashToSend) {
     sendAT("AT+TEST=RXLRPKT");
 }
 
-static void processRxLine(String line) {
-    int rxIndex = line.indexOf("+TEST: RX \"");
-    if (rxIndex == -1) return;
+static void processLoRaPacket(const String& dataLine, const String& rssiLine) {
 
-    int firstQuote = line.indexOf('"', rxIndex);
-    int lastQuote = line.lastIndexOf('"');
+    // 1. Parse RSSI from the second line
 
-    if (firstQuote != -1 && lastQuote != -1 && lastQuote > firstQuote) {
-        String hexContent = line.substring(firstQuote + 1, lastQuote);
+    if (rssiLine.length() > 0) {
+
+        int firstComma = rssiLine.indexOf(',');
+
+        String rssiStr;
+
+        if (firstComma != -1) {
+
+            rssiStr = rssiLine.substring(0, firstComma);
+
+        } else {
+
+            rssiStr = rssiLine;
+
+        }
+
+        rssiStr.trim();
+
+        int rssi = rssiStr.toInt();
+
+
+
+        if (rssi < 0) {
+
+            Serial.print("[LoRa] RSSI = ");
+
+            Serial.println(rssi);
+
+            setLastRssi(rssi);
+
+        } else {
+
+             Serial.println("[LoRa] Warning: Parsed RSSI is not a negative value from line: " + rssiLine);
+
+        }
+
+    } else {
+
+        Serial.println("[LoRa] Warning: Did not receive a second line for RSSI.");
+
+    }
+
+
+
+    // 2. Parse data from the first line
+
+    int firstQuote = dataLine.indexOf('"');
+
+    int lastQuote = dataLine.lastIndexOf('"');
+
+
+
+    if (firstQuote != -1 && lastQuote > firstQuote) {
+
+        String hexContent = dataLine.substring(firstQuote + 1, lastQuote);
+
+
 
         // Expect: 6 bytes Data + 32 bytes HMAC = 38 bytes => 76 hex chars
+
         if (hexContent.length() == 76) { 
+
             uint8_t payload[38];
+
             hexStringToBytes(hexContent, payload, 38);
 
+
+
             uint8_t dataPart[6];
+
             uint8_t receivedHash[32];
+
             
+
             memcpy(dataPart, payload, 6);
+
             memcpy(receivedHash, payload + 6, 32);
 
+
+
             // Verify HMAC
+
             uint8_t calculatedHash[32];
+
             hmac_sha256(
+
                 (const uint8_t*)LORA_SHARED_SECRET, strlen(LORA_SHARED_SECRET),
+
                 dataPart, 6, 
+
                 calculatedHash
+
             );
 
+
+
             if (memcmp(receivedHash, calculatedHash, 32) == 0) {
+
                 // Determine TYPE
+
                 uint8_t msgType = dataPart[1];
 
+
+
                 if (msgType == 2) { 
+
                     // --- TYPE 2: DATA REPORT ---
+
                     uint8_t sensorId = dataPart[0];
+
                     float tempVal = (int16_t)(dataPart[2] | (dataPart[3] << 8)) / 100.0;
+
                     float humVal = (int16_t)(dataPart[4] | (dataPart[5] << 8)) / 100.0;
 
+
+
                     Serial.println("\n========== [LoRa] PAQUET DATA RECU ==========");
+
                     Serial.print("  Source ID   : "); Serial.print(sensorId);
+
                     if (sensorId == CAFETERIA_ID)      Serial.println(" (CAFETERIA)");
+
                     else if (sensorId == FABLAB_ID)    Serial.println(" (FABLAB)");
+
                     else                               Serial.println(" (INCONNU)");
+
                     Serial.print("  Temperature : "); Serial.print(tempVal); Serial.println(" C");
+
                     Serial.print("  Humidite    : "); Serial.print(humVal); Serial.println(" %");
+
                     Serial.println("=============================================");
 
+
+
                     updateRemoteData(sensorId, tempVal, humVal);
+
                     setLoraStatus(true);
+
                     
+
                     digitalWrite(LED_PIN, HIGH);
+
                     delay(50);
+
                     digitalWrite(LED_PIN, LOW);
 
+
+
                     // Send Standard ACK (Hash)
+
                     sendAck(receivedHash);
 
+
+
                 } else if (msgType == 3) {
+
                     // --- TYPE 3: TIME REQUEST ---
+
                     Serial.println("\n[LoRa] TIME SYNC REQUEST RECEIVED.");
+
                     
+
                     // Get Current Time
+
                     RTCTime current;
+
                     RTC.getTime(current);
+
                     uint32_t now = current.getUnixTime();
+
                     Serial.print("  Current Unix Time: "); Serial.println(now);
 
+
+
                     // Prepare Response Packet (Type 4)
-                    // Format: [ID (Target), TYPE (4), TIME (4 Bytes), HMAC (32 Bytes)]
+
                     uint8_t respPayload[6];
-                    respPayload[0] = dataPart[0]; // Target = Requestor ID
-                    respPayload[1] = 4;           // Type 4 = Time Response
+
+                    respPayload[0] = dataPart[0];
+
+                    respPayload[1] = 4;
+
                     respPayload[2] = (uint8_t)(now & 0xFF);
+
                     respPayload[3] = (uint8_t)((now >> 8) & 0xFF);
+
                     respPayload[4] = (uint8_t)((now >> 16) & 0xFF);
+
                     respPayload[5] = (uint8_t)((now >> 24) & 0xFF);
 
+
+
                     // Sign
+
                     uint8_t respHmac[32];
+
                     hmac_sha256((const uint8_t*)LORA_SHARED_SECRET, strlen(LORA_SHARED_SECRET), respPayload, 6, respHmac);
 
+
+
                     // To Hex
+
                     String hexResp = "";
+
                     for(int i=0; i<6; i++) hexResp += byteToHexString(respPayload[i]);
+
                     for(int i=0; i<32; i++) hexResp += byteToHexString(respHmac[i]);
 
+
+
                     // Send
+
                     Serial.println("[LoRa] Sending Time Response...");
+
                     while(Serial1.available()) Serial1.read();
+
                     sendAT("AT+TEST=TXLRPKT,\"" + hexResp + "\"");
+
                     
-                    // Wait TX DONE
+
                     uint32_t tStart = millis();
+
                     while(millis() - tStart < 2000) {
+
                         String line = Serial1.readStringUntil('\n');
+
                         if (line.indexOf("TX DONE") != -1) break;
+
                     }
+
                     
-                    // Re-arm RX
+
                     sendAT("AT+TEST=RXLRPKT");
+
                 }
 
+
+
             } else {
+
                 Serial.println("[LoRa] ERROR: Invalid HMAC signature.");
+
             }
+
         } else {
+
              Serial.println("[LoRa] Ignored: Invalid length (" + String(hexContent.length()) + ")");
+
         }
+
     } else {
+
         Serial.println("[LoRa] Parse error.");
+
     }
+
 }
 
 void loraTask(void *pvParameters) {
@@ -341,8 +489,28 @@ void loraTask(void *pvParameters) {
         if (Serial1.available()) {
             String line = Serial1.readStringUntil('\n');
             line.trim();
-            if (line.length() > 0) {
-                processRxLine(line);
+
+            if (line.startsWith("+TEST: RX \"")) {
+                // Data packet line found. The next line should be the RSSI.
+                String rssiLine = "";
+                uint32_t startTime = millis();
+                // Wait a short time (e.g., up to 100ms) for the next line to arrive.
+                while (millis() - startTime < 100) {
+                    if (Serial1.available()) {
+                        rssiLine = Serial1.readStringUntil('\n');
+                        rssiLine.trim();
+                        break;
+                    }
+                    vTaskDelay(5 / portTICK_PERIOD_MS);
+                }
+                
+                // Process the packet with both the data line and the (potentially empty) rssi line.
+                processLoRaPacket(line, rssiLine);
+
+            } else if (line.length() > 0) {
+                // This is some other unsolicited line from the module (e.g., "+OK")
+                // You can log it if needed for debugging.
+                // Serial.print("[LoRa/Other] "); Serial.println(line);
             }
         }
         

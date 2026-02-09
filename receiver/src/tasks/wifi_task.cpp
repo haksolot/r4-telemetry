@@ -95,7 +95,8 @@ void wifiTask(void *pvParameters) {
                     payload += "\"humidity\":" + String(data.localHumidity) + ",";
                     payload += "\"loraStatus\":" + String(data.loraModuleConnected ? "true" : "false") + ",";
                     payload += "\"wifiStatus\":true,";
-                    payload += "\"mqttStatus\":true";
+                    payload += "\"mqttStatus\":true,";
+                    payload += "\"loraRssi\":" + String(data.lastRssi);
                     payload += "}";
                     
                     if (mqttClient.publish(MQTT_TOPIC_CAFET, payload.c_str())) {
@@ -111,7 +112,8 @@ void wifiTask(void *pvParameters) {
                     payload += "\"source\":\"fablab\",";
                     payload += "\"temperature\":" + String(data.fablab.temperature) + ",";
                     payload += "\"humidity\":" + String(data.fablab.humidity) + ",";
-                    payload += "\"lastUpdate\":" + String(millis() - data.fablab.lastUpdate);
+                    payload += "\"lastUpdate\":" + String(millis() - data.fablab.lastUpdate) + ",";
+                    payload += "\"loraRssi\":" + String(data.lastRssi);
                     payload += "}";
                     
                     mqttClient.publish(MQTT_TOPIC_FABLAB, payload.c_str());

@@ -14,7 +14,7 @@ struct SystemData {
     // Valeurs des capteurs
     float localTemperature;
     float localHumidity;
-    
+    int lastRssi;
     // Données des capteurs distants
     RemoteSensorData cafeteria;
     RemoteSensorData fablab;
@@ -26,6 +26,7 @@ struct SystemData {
     bool mqttConnected;
     bool timeSynced;
 };
+void setLastRssi(int rssi);
 
 void initDataManager();
 
